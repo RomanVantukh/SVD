@@ -1,10 +1,8 @@
 import numpy as np
-import math as mt
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 from random import randint
-from sklearn.decomposition import TruncatedSVD
 import scipy.sparse.linalg as lin
 from scipy.sparse import csr_matrix
 from copy import deepcopy
