@@ -9,22 +9,11 @@ import scipy.sparse.linalg as lin
 from scipy.sparse import csr_matrix
 from copy import deepcopy
 
-def main():
-    R, Sp = readMatrixFromFile('u.data', ['user_id', 'movie_id', 'rating'])
-    k = 100
-    #k = computeK(R.todense(), correlationThreshold)
-    Q, S, Vt = svd(R, Sp, k)
-    Rp = getRp(Q, S, Vt)
-    error = rmse(Rp - R, Sp)
-    maxE = maxError(Rp - R, Sp)
-    return R, Rp, S, Sp, k, error, maxE
-
 # Simulations
 
 def simulation(topK, maxNumberOfIterations):
     R, Sp = readMatrixFromFile('u.data', ['user_id', 'movie_id', 'rating'])
     numbersOfLatentFactors = range(int(np.min(R.shape) / 10) , np.min(R.shape) - 2)
-    #numbersOfLatentFactors = range(90, 95)
     rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations = simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations)
     plotFunction(numbersOfLatentFactors, rmses, 'RMSE', 'k', 'rmse')
     plotFunction(numbersOfLatentFactors, maxErrors, 'Max error', 'k', 'max error')
@@ -74,7 +63,7 @@ def readMatrixFromFile(pathToFile, columnNames):
         S.append([ratings[i, 0] - 1, ratings[i, 1] - 1])
     return R, S
 
-# Different SVD approaches
+# Pure SVD factorization
 
 def svd(R, Sp, k, isReversed = False):
     Q, s, Pt = lin.svds(csr_matrix(R), k, which = 'LM')
@@ -109,6 +98,7 @@ def getTopKRecommendations(Rp, Sp, userIndex, k):
 
 # Iterative approaches for SVD
 
+# Iterative SVD - stoping based on threshold
 def svdIterative(R, Sp, k, error, isReversed = False):
     Rf = meanCenterMatrix(R, Sp)
     iterations = 0
@@ -123,6 +113,7 @@ def svdIterative(R, Sp, k, error, isReversed = False):
         return Q, S, Vt, iterations
     return changeColumnDirection(Q, S, Vt), iterations
 
+# Iterative SVD - stoping based on number of iterations
 def svdIterativeI(R, Sp, k, maxNumberOfIterations, isReversed = False):
     Rf = meanCenterMatrix(R, Sp)
     iterations = 0
@@ -235,38 +226,3 @@ def plotFunction(x, y, title, x_label, y_label):
     plt.ylabel(y_label)
     plt.grid()
     plt.show()
-
-def plotTwoFunctions(x1, y1, x2, y2, title, x_label, y_label):
-    fig_size = plt.rcParams["figure.figsize"]
-    fig_size[0] = 7
-    fig_size[1] = 5
-    plt.rcParams["figure.figsize"] = fig_size
-    plt.plot(x1, y1, color='black', marker='o', markersize=2)
-    plt.plot(x2, y2, color='red', marker='o', markersize=2)
-    plt.title(title)
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.grid()
-    plt.show()
-
-# utility
-
-def ss(threshhold, singularValueRatios, rmses):
-    for i in range(len(singularValueRatios)):
-        if singularValueRatios[i] > threshhold:
-            index = i
-        else:
-            break
-    return threshhold, index + 1, rmses[index]
-
-def sss(R, Sp, k, step, numberOfRuns, userIndex, topK):
-    Q, S, Vt = svd(R, Sp, k)
-    Rp = getRp(Q, S, Vt)
-    originRecommendations = getTopKRecommendations(Rp, Sp, userIndex, topK)
-    result = []
-    for i in range(1, numberOfRuns + 1):
-        Q, S, Vt = svdWithMeanCentering(R, Sp, k + i * step)
-        Rp = getRp(Q, S, Vt)
-        rec = getTopKRecommendations(Rp, Sp, userIndex, topK)
-        result.append([k + i * step, len(list(set(originRecommendations).intersection(set(rec))))])
-    return result
