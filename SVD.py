@@ -6,18 +6,20 @@ from random import randint
 import scipy.sparse.linalg as lin
 from scipy.sparse import csr_matrix
 from copy import deepcopy
+import time
 
 # Simulations
 
 def simulation(topK, maxNumberOfIterations):
     R, Sp = readMatrixFromFile('u.data', ['user_id', 'movie_id', 'rating'])
-    numbersOfLatentFactors = range(int(np.min(R.shape) / 10) , np.min(R.shape) - 2)
-    rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations = simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations)
+    numbersOfLatentFactors = range(1, np.min(R.shape) - 2)
+    rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations, runningTime = simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations)
     plotFunction(numbersOfLatentFactors, rmses, 'RMSE', 'k', 'rmse')
-    plotFunction(numbersOfLatentFactors, maxErrors, 'Max error', 'k', 'max error')
+    plotFunction(numbersOfLatentFactors, maxErrors, 'Absolute error', 'k', 'absolute error')
     plotFunction(numbersOfLatentFactors, singularValuesRatios, 'Singular values ratio', 'k', 'singular values ratio')
     plotFunction(numbersOfLatentFactors, recommendationRatios, 'Recommendation ratio', 'k', 'recommendation ratio')
-    return rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations
+    plotFunction(numbersOfLatentFactors, runningTime, 'Running time', 'k', 'time')
+    return rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations, runningTime
 
 def simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations):
     Q, S, Vt, iterations = svdIterativeI(R, Sp, max(numbersOfLatentFactors), maxNumberOfIterations, True)
@@ -29,9 +31,12 @@ def simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations):
     singularValuesRatios = []
     recommendationRatios = []
     recommendations = []
+    runningTimes = []
     for k in numbersOfLatentFactors:
         print(k)
+        startTime = time.time()
         Q, S, Vt, iterations = svdIterativeI(R, Sp, k, maxNumberOfIterations, True)
+        runningTime = time.time() - startTime
         Rp = getRp(Q, S, Vt)
         rmses.append(rmse(Rp - R, Sp))
         maxErrors.append(maxError(Rp - R, Sp))
@@ -40,7 +45,8 @@ def simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations):
         recommendations.append(currentRecommendation)
         intersectedRecommendations = list(originalRecommendations.intersection(currentRecommendation))
         recommendationRatios.append(len(intersectedRecommendations) * 100 / topK)
-    return rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations
+        runningTimes.append(runningTime)
+    return rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations, runningTimes
 
 # Constructing prediction matrix
 
@@ -119,15 +125,8 @@ def svdIterativeI(R, Sp, k, maxNumberOfIterations, isReversed = False):
         Q, S, Vt = svd(Rf, Sp, k, True)
         Rp = getRp(Q, S, Vt)
         Q1, S1, Vt1 = changeColumnDirection(Q, S, Vt)
-        print(iterations)
-        print(Q1.round(4))
-        print(S1.round(4))
-        print(np.matmul(Q1, S1).round(4))
-        print(Vt1.round(4))
-        print(getRp(Q1, S1, Vt1).round(4))
         Rf = constructNewR(Rp, R, Sp)
         iterations += 1
-        print(Rf.round(4))
     if isReversed:
         return Q, S, Vt, iterations
     return changeColumnDirection(Q, S, Vt), iterations
@@ -219,6 +218,20 @@ def plotFunction(x, y, title, x_label, y_label):
     fig_size[1] = 5
     plt.rcParams["figure.figsize"] = fig_size
     plt.plot(x, y, color='black', marker='o', markersize=2)
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.grid()
+    plt.show()
+
+def plotThreeFunctions(x1, y1, y2, y3, title, x_label, y_label):
+    fig_size = plt.rcParams["figure.figsize"]
+    fig_size[0] = 7
+    fig_size[1] = 5
+    plt.rcParams["figure.figsize"] = fig_size
+    plt.plot(x1, y1, color='black', marker='o', markersize=0.5, linewidth=1.0)
+    plt.plot(x1, y2, color='red', marker='o', markersize=0.5, linewidth=1.0)
+    plt.plot(x1, y3, color='green', marker='o', markersize=0.5, linewidth=1.0)
     plt.title(title)
     plt.xlabel(x_label)
     plt.ylabel(y_label)
