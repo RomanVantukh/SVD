@@ -29,14 +29,11 @@ def simulation(topK, maxNumberOfIterations):
 
     numberOfSimulations = np.min(R.shape) - 2
     step = int((np.min(R.shape) - 2)/numberOfSimulations)
-    numbersOfLatentFactors = [x * 100 for x in range(1, \
-        (int)(numberOfSimulations / 100) + 1)]
+    numbersOfLatentFactors = [x * 100 for x in range(1, (int)(numberOfSimulations / 100) + 1)]
     numbersOfLatentFactors.append(numberOfSimulations)
-    rmses, maxErrors, recommendations, runningTime, Rs = simulateOverK(R, Sp, \
-        numbersOfLatentFactors, topK, maxNumberOfIterations)
+    rmses, maxErrors, recommendations, runningTime, Rs = simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations)
     plotFunction(numbersOfLatentFactors, rmses, 'RMSE', 'k', 'rmse')
-    plotFunction(numbersOfLatentFactors, maxErrors, 'Absolute error', 'k', \
-        'absolute error')
+    plotFunction(numbersOfLatentFactors, maxErrors, 'Absolute error', 'k', 'absolute error')
     plotFunction(numbersOfLatentFactors, runningTime, 'Running time', 'k', 'time')
     return rmses, maxErrors, recommendations, runningTime, Rs
 
@@ -51,8 +48,7 @@ def simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations):
     Rs = []
     for k in numbersOfLatentFactors:
         startTime = time.time()
-        Q, S, Vt, iterations = svdIterativeI(R, Rf, Sp, k, \
-            maxNumberOfIterations, True)
+        Q, S, Vt, iterations = svdIterativeI(R, Rf, Sp, k, maxNumberOfIterations, True)
         runningTime = time.time() - startTime
         Rp = getRp(Q, S, Vt)
         Rs.append(Rp)
@@ -72,8 +68,7 @@ def getRp(Q, S, Vt):
 # Reading from file
 
 def readMatrixFromFile(pathToFile, columnNames):
-    ratings = pd.read_csv(pathToFile, sep = '\t', names = columnNames, \
-        usecols=range(3)).values
+    ratings = pd.read_csv(pathToFile, sep = '\t', names = columnNames, usecols=range(3)).values
     m = max(ratings[:, 0])
     n = max(ratings[:, 1])
     R = np.zeros([m, n])
