@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
+import random
 from random import randint
 import scipy.sparse.linalg as lin
 from scipy.sparse import csr_matrix
@@ -11,42 +12,56 @@ import time
 # Simulations
 
 def simulation(topK, maxNumberOfIterations):
+    # 100 movieLens
     R, Sp = readMatrixFromFile('u.data', ['user_id', 'movie_id', 'rating'])
-    numbersOfLatentFactors = range(1, np.min(R.shape) - 2)
-    rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations, runningTime = simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations)
+
+    # 1m movieLens
+    #R, Sp = readMovieLens1m('ratings.dat')
+
+    # 10m movieLens (truncated)
+    #R, Sp = readMovieLens10m('ratings10M.dat')
+
+    # Jokes DataSet
+    #R, Sp = readJokesDataSet('jesterfinal151cols.xls')
+    
+    # MovieLens 100k another
+    #R, Sp = read100k('ratings100k.csv')
+
+    numberOfSimulations = np.min(R.shape) - 2
+    step = int((np.min(R.shape) - 2)/numberOfSimulations)
+    numbersOfLatentFactors = [x * 100 for x in range(1, \
+        (int)(numberOfSimulations / 100) + 1)]
+    numbersOfLatentFactors.append(numberOfSimulations)
+    rmses, maxErrors, recommendations, runningTime, Rs = simulateOverK(R, Sp, \
+        numbersOfLatentFactors, topK, maxNumberOfIterations)
     plotFunction(numbersOfLatentFactors, rmses, 'RMSE', 'k', 'rmse')
-    plotFunction(numbersOfLatentFactors, maxErrors, 'Absolute error', 'k', 'absolute error')
-    plotFunction(numbersOfLatentFactors, singularValuesRatios, 'Singular values ratio', 'k', 'singular values ratio')
-    plotFunction(numbersOfLatentFactors, recommendationRatios, 'Recommendation ratio', 'k', 'recommendation ratio')
+    plotFunction(numbersOfLatentFactors, maxErrors, 'Absolute error', 'k', \
+        'absolute error')
     plotFunction(numbersOfLatentFactors, runningTime, 'Running time', 'k', 'time')
-    return rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations, runningTime
+    return rmses, maxErrors, recommendations, runningTime, Rs
 
 def simulateOverK(R, Sp, numbersOfLatentFactors, topK, maxNumberOfIterations):
-    Q, S, Vt, iterations = svdIterativeI(R, Sp, max(numbersOfLatentFactors), maxNumberOfIterations, True)
-    Rp = getRp(Q, S, Vt)
     userIndex = randint(0, R.shape[0] - 1)
-    originalRecommendations = set(getTopKRecommendations(Rp, Sp, userIndex, topK))
     rmses = []
     maxErrors = []
-    singularValuesRatios = []
     recommendationRatios = []
     recommendations = []
     runningTimes = []
+    Rf = meanCenterMatrix(R, Sp)
+    Rs = []
     for k in numbersOfLatentFactors:
-        print(k)
         startTime = time.time()
-        Q, S, Vt, iterations = svdIterativeI(R, Sp, k, maxNumberOfIterations, True)
+        Q, S, Vt, iterations = svdIterativeI(R, Rf, Sp, k, \
+            maxNumberOfIterations, True)
         runningTime = time.time() - startTime
         Rp = getRp(Q, S, Vt)
+        Rs.append(Rp)
         rmses.append(rmse(Rp - R, Sp))
         maxErrors.append(maxError(Rp - R, Sp))
-        singularValuesRatios.append(min(np.diag(S)) * 100 / np.max(S))
-        currentRecommendation = set(getTopKRecommendations(Rp, Sp, userIndex, topK))
+        currentRecommendation = getTopKRecommendations(Rp, Sp, userIndex, topK)
         recommendations.append(currentRecommendation)
-        intersectedRecommendations = list(originalRecommendations.intersection(currentRecommendation))
-        recommendationRatios.append(len(intersectedRecommendations) * 100 / topK)
         runningTimes.append(runningTime)
-    return rmses, maxErrors, singularValuesRatios, recommendationRatios, recommendations, runningTimes
+    return rmses, maxErrors, recommendations, runningTimes, Rs
 
 # Constructing prediction matrix
 
@@ -57,7 +72,8 @@ def getRp(Q, S, Vt):
 # Reading from file
 
 def readMatrixFromFile(pathToFile, columnNames):
-    ratings = pd.read_csv(pathToFile, sep = '\t', names = columnNames, usecols=range(3)).values
+    ratings = pd.read_csv(pathToFile, sep = '\t', names = columnNames, \
+        usecols=range(3)).values
     m = max(ratings[:, 0])
     n = max(ratings[:, 1])
     R = np.zeros([m, n])
@@ -65,6 +81,81 @@ def readMatrixFromFile(pathToFile, columnNames):
     for i in range(ratings.shape[0]):
         R[ratings[i, 0] - 1, ratings[i, 1] - 1] = ratings[i, 2]
         S.append([ratings[i, 0] - 1, ratings[i, 1] - 1])
+    return R, S
+
+def read100k(pathToFile):
+    ratings = pd.read_csv(pathToFile).values
+    m = (int)(max(ratings[:, 0]))
+    items = set(ratings[:, 1])
+    n = len(items)
+    items = list(items)
+    R = np.zeros([m, n], dtype=float)
+    S = []
+    for i in range(ratings.shape[0]):
+        userId = (int)(ratings[i, 0] - 1)
+        itemId = items.index(ratings[i, 1])
+        R[userId, itemId] = ratings[i, 2]
+        S.append([userId, itemId])
+    return R, S
+
+def readMovieLens1m(pathToFile):
+    file = open(pathToFile)
+    m = 0
+    n = 0
+    list = []
+    for line in file:
+        data = line.split('::')
+        userId = (int)(data[0]) - 1
+        itemId = (int)(data[1]) - 1
+        rating = (int)(data[2])
+        m = max(m, userId)
+        n = max(n, itemId)
+        list.append([userId, itemId, rating])
+    m = m + 1
+    n = n + 1
+    result = np.zeros([m, n], dtype=float)
+    S = []
+    for i in range(len(list)):
+        result[list[i][0], list[i][1]] = list[i][2]
+        S.append([list[i][0], list[i][1]])
+    return result, S
+
+def readMovieLens10m(pathToFile):
+    file = open(pathToFile)
+    m = 1500
+    n = 2000
+    result = np.zeros([m, n], dtype=float)
+    for line in file:
+        data = line.split('::')
+        userId = (int)(data[0]) - 1
+        itemId = (int)(data[1]) - 1
+        rating = (float)(data[2])
+        if ((userId < m) and (itemId < n)):
+            result[userId, itemId] = rating
+    r = result[~np.all(result == 0.0, axis=1)]
+    r = r.T
+    r = r[~np.all(r == 0.0, axis=1)]
+    result = r.T
+    S = []
+    for i in range(result.shape[0]):
+        for j in range(result.shape[1]):
+            if (result[i, j] > 0):
+                S.append([i, j])
+    return result, S
+
+def readJokesDataSet(pathToFile):
+    file = pd.ExcelFile(pathToFile)
+    sheet = file.parse()
+    m = len(sheet[sheet.columns[0]])
+    n = len(sheet.columns)
+    R = np.zeros([m, n], dtype = float)
+    S = []
+    for i in range(m):
+        for j in range(n):
+            rating = sheet[sheet.columns[j]][i] + 11
+            if (rating <= 21):
+                R[i, j] = rating
+                S.append([i, j])
     return R, S
 
 # Pure SVD factorization
@@ -118,8 +209,7 @@ def svdIterative(R, Sp, k, error, isReversed = False):
     return changeColumnDirection(Q, S, Vt), iterations
 
 # Iterative SVD - stoping based on number of iterations
-def svdIterativeI(R, Sp, k, maxNumberOfIterations, isReversed = False):
-    Rf = meanCenterMatrix(R, Sp)
+def svdIterativeI(R, Rf, Sp, k, maxNumberOfIterations, isReversed = False):
     iterations = 0
     while (iterations < maxNumberOfIterations):
         Q, S, Vt = svd(Rf, Sp, k, True)
@@ -127,9 +217,9 @@ def svdIterativeI(R, Sp, k, maxNumberOfIterations, isReversed = False):
         Q1, S1, Vt1 = changeColumnDirection(Q, S, Vt)
         Rf = constructNewR(Rp, R, Sp)
         iterations += 1
-    if isReversed:
-        return Q, S, Vt, iterations
-    return changeColumnDirection(Q, S, Vt), iterations
+    if isReversed == False:
+        Q, S, Vt = changeColumnDirection(Q, S, Vt)
+    return Q, S, Vt, iterations
 
 def constructNewR(newR, oldR, Sp):
     for index in Sp:
@@ -162,9 +252,7 @@ def getUnspecifiedIndeces(R, Sp):
     result = []
     for i in range(R.shape[0]):
         for j in range(R.shape[1]):
-            if [i, j] in Sp:
-                continue
-            else:
+            if (R[i, j] == 0):
                 result.append([i, j])
     return result
 
@@ -182,33 +270,17 @@ def maxError(A, Sp):
         norm = max(norm, np.abs(A[index[0], index[1]]))
     return norm
 
-# Computing K
+# Get singular values
 
-def correlationOfMatrix(R):
-    r = R.T
-    return np.corrcoef(r)
-
-def getIndexOfMaxElement(A):
-    index = np.argmax(np.absolute(A))
-    i = int(index / A.shape[0])
-    j = index % A.shape[0]
-    return [i, j]
-
-def removeItemFromMatrix(A, index):
-    A = np.delete(A, index[0], axis=0)
-    A = np.delete(A, index[1], axis=1)
-    return A
-
-def computeK(R, threshold):
-    C = correlationOfMatrix(R)
-    D = np.diag(np.diag(C))
-    T = C - D
-    while (True):
-        index = getIndexOfMaxElement(T)
-        if abs(T[index[0], index[1]]) > threshold:
-            T = removeItemFromMatrix(T, index)
-        else:
-            return min(min(R.shape) - 2, T.shape[0])
+def getSingularValues(R, Sp):
+    Rf = meanCenterMatrix(R, Sp)
+    if (Rf.shape[0] < Rf.shape[1]):
+        R_extended = np.matmul(Rf, Rf.T)
+    else:
+        R_extended = np.matmul(Rf.T, Rf)
+    eigenvalues = np.linalg.eigvals(R_extended)
+    singularValues = [x ** 0.5 for x in sorted(eigenvalues.real, reverse=True)]
+    return singularValues[:np.min(R.shape) - 2]
 
 # Plotting
 
@@ -218,20 +290,6 @@ def plotFunction(x, y, title, x_label, y_label):
     fig_size[1] = 5
     plt.rcParams["figure.figsize"] = fig_size
     plt.plot(x, y, color='black', marker='o', markersize=2)
-    plt.title(title)
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
-    plt.grid()
-    plt.show()
-
-def plotThreeFunctions(x1, y1, y2, y3, title, x_label, y_label):
-    fig_size = plt.rcParams["figure.figsize"]
-    fig_size[0] = 7
-    fig_size[1] = 5
-    plt.rcParams["figure.figsize"] = fig_size
-    plt.plot(x1, y1, color='black', marker='o', markersize=0.5, linewidth=1.0)
-    plt.plot(x1, y2, color='red', marker='o', markersize=0.5, linewidth=1.0)
-    plt.plot(x1, y3, color='green', marker='o', markersize=0.5, linewidth=1.0)
     plt.title(title)
     plt.xlabel(x_label)
     plt.ylabel(y_label)
